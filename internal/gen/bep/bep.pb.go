@@ -186,6 +186,7 @@ const (
 	FolderType_FOLDER_TYPE_SEND_ONLY         FolderType = 1
 	FolderType_FOLDER_TYPE_RECEIVE_ONLY      FolderType = 2
 	FolderType_FOLDER_TYPE_RECEIVE_ENCRYPTED FolderType = 3
+	FolderType_FOLDER_TYPE_REMOTE_ACCESS     FolderType = 4
 )
 
 // Enum value maps for FolderType.
@@ -195,12 +196,14 @@ var (
 		1: "FOLDER_TYPE_SEND_ONLY",
 		2: "FOLDER_TYPE_RECEIVE_ONLY",
 		3: "FOLDER_TYPE_RECEIVE_ENCRYPTED",
+		4: "FOLDER_TYPE_REMOTE_ACCESS",
 	}
 	FolderType_value = map[string]int32{
 		"FOLDER_TYPE_SEND_RECEIVE":      0,
 		"FOLDER_TYPE_SEND_ONLY":         1,
 		"FOLDER_TYPE_RECEIVE_ONLY":      2,
 		"FOLDER_TYPE_RECEIVE_ENCRYPTED": 3,
+		"FOLDER_TYPE_REMOTE_ACCESS":     4,
 	}
 )
 

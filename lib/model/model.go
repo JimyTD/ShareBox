@@ -337,7 +337,7 @@ func (m *model) fatal(err error) {
 // Need to hold lock on m.mut when calling this.
 func (m *model) addAndStartFolderLocked(cfg config.FolderConfiguration, cacheIgnoredFiles bool) {
 	ignores := ignore.New(cfg.Filesystem(), ignore.WithCache(cacheIgnoredFiles))
-	if cfg.Type != config.FolderTypeReceiveEncrypted {
+	if cfg.Type != config.FolderTypeReceiveEncrypted && cfg.Type != config.FolderTypeRemoteAccess {
 		if err := ignores.Load(".stignore"); err != nil && !fs.IsNotExist(err) {
 			slog.Error("Failed to load ignores", slogutil.Error(err))
 		}
@@ -2616,6 +2616,13 @@ func (m *model) generateClusterConfigRLocked(device protocol.DeviceID) (*protoco
 			protocolFolder.StopReason = protocol.FolderStopReasonPaused
 		}
 
+		// RemoteAccess declares as SendReceive at the protocol level so
+		// the remote side sends us index updates (we can browse) and
+		// accepts our index updates (we can upload).
+		if folderCfg.Type == config.FolderTypeRemoteAccess {
+			protocolFolder.Type = protocol.FolderTypeSendReceive
+		}
+
 	nextDevice:
 		for _, folderDevice := range folderCfg.Devices {
 			deviceCfg, _ := m.cfg.Device(folderDevice.DeviceID)
@@ -2926,6 +2933,23 @@ func (m *model) BringToFront(folder, file string) {
 	if ok {
 		runner.BringToFront(file)
 	}
+}
+
+// StageRemoteFile stages a file for upload via a RemoteAccess folder.
+// The file at srcPath is copied into the folder's staging area, scanned,
+// and sent to remote peers via the existing Syncthing transfer machinery.
+func (m *model) StageRemoteFile(folderID, srcPath, dstName string) error {
+	m.mut.RLock()
+	runner, ok := m.folderRunners.Get(folderID)
+	m.mut.RUnlock()
+	if !ok {
+		return fmt.Errorf("folder %q not found", folderID)
+	}
+	ra, ok := runner.(*remoteAccessFolder)
+	if !ok {
+		return fmt.Errorf("folder %q is not RemoteAccess type", folderID)
+	}
+	return ra.StageFile(srcPath, dstName)
 }
 
 func (m *model) ResetFolder(folder string) error {

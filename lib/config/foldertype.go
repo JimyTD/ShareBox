@@ -15,6 +15,7 @@ const (
 	FolderTypeSendOnly         = FolderType(protocol.FolderTypeSendOnly)
 	FolderTypeReceiveOnly      = FolderType(protocol.FolderTypeReceiveOnly)
 	FolderTypeReceiveEncrypted = FolderType(protocol.FolderTypeReceiveEncrypted)
+	FolderTypeRemoteAccess     = FolderType(protocol.FolderTypeRemoteAccess)
 )
 
 func (t FolderType) String() string {
@@ -27,6 +28,8 @@ func (t FolderType) String() string {
 		return "receiveonly"
 	case FolderTypeReceiveEncrypted:
 		return "receiveencrypted"
+	case FolderTypeRemoteAccess:
+		return "remoteaccess"
 	default:
 		return "unknown"
 	}
@@ -46,6 +49,8 @@ func (t *FolderType) UnmarshalText(bs []byte) error {
 		*t = FolderTypeReceiveOnly
 	case "receiveencrypted":
 		*t = FolderTypeReceiveEncrypted
+	case "remoteaccess":
+		*t = FolderTypeRemoteAccess
 	default:
 		*t = FolderTypeSendReceive
 	}

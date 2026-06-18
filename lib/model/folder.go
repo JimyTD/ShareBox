@@ -354,7 +354,7 @@ func (f *folder) getHealthErrorAndLoadIgnores() error {
 	if err := f.getHealthErrorWithoutIgnores(); err != nil {
 		return err
 	}
-	if f.Type != config.FolderTypeReceiveEncrypted {
+	if f.Type != config.FolderTypeReceiveEncrypted && f.Type != config.FolderTypeRemoteAccess {
 		if err := f.ignores.Load(".stignore"); err != nil && !fs.IsNotExist(err) {
 			return fmt.Errorf("loading ignores: %w", err)
 		}
@@ -366,8 +366,11 @@ func (f *folder) getHealthErrorWithoutIgnores() error {
 	// Check for folder errors, with the most serious and specific first and
 	// generic ones like out of space on the home disk later.
 
-	if err := f.CheckPath(); err != nil {
-		return err
+	// RemoteAccess folders don't store files locally — skip path checks.
+	if f.Type != config.FolderTypeRemoteAccess {
+		if err := f.CheckPath(); err != nil {
+			return err
+		}
 	}
 
 	if minFree := f.model.cfg.Options().MinHomeDiskFree; minFree.Value > 0 {
