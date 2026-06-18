@@ -260,6 +260,7 @@ func (s *service) Serve(ctx context.Context) error {
 	restMux.HandlerFunc(http.MethodGet, "/rest/db/localchanged", s.getDBLocalChanged)         // folder [perpage] [page]
 	restMux.HandlerFunc(http.MethodGet, "/rest/db/status", s.getDBStatus)                     // folder
 	restMux.HandlerFunc(http.MethodGet, "/rest/db/browse", s.getDBBrowse)                     // folder [prefix] [dirsonly] [levels]
+	restMux.HandlerFunc(http.MethodPost, "/rest/folder/upload", s.postFolderUpload)           // folder name
 	restMux.HandlerFunc(http.MethodGet, "/rest/folder/versions", s.getFolderVersions)         // folder
 	restMux.HandlerFunc(http.MethodGet, "/rest/folder/errors", s.getFolderErrors)             // folder [perpage] [page]
 	restMux.HandlerFunc(http.MethodGet, "/rest/folder/pullerrors", s.getFolderErrors)         // folder (deprecated)
@@ -1644,6 +1645,59 @@ func (s *service) getFolderErrors(w http.ResponseWriter, r *http.Request) {
 		"page":    page,
 		"perpage": perpage,
 	})
+}
+
+// postFolderUpload handles file uploads for RemoteAccess folders.
+// Query params: folder=<id>&name=<filename>, body: multipart file data.
+func (s *service) postFolderUpload(w http.ResponseWriter, r *http.Request) {
+	qs := r.URL.Query()
+	folder := qs.Get("folder")
+	name := qs.Get("name")
+	if folder == "" || name == "" {
+		http.Error(w, "missing folder or name parameter", http.StatusBadRequest)
+		return
+	}
+
+	// Read the uploaded file to a temp file
+	mr, err := r.MultipartReader()
+	if err != nil {
+		http.Error(w, "reading multipart: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	part, err := mr.NextPart()
+	if err != nil {
+		http.Error(w, "reading part: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	tmp, err := os.CreateTemp("", "sharebox-upload-*")
+	if err != nil {
+		http.Error(w, "creating temp file: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer os.Remove(tmp.Name())
+	defer tmp.Close()
+
+	if _, err := io.Copy(tmp, part); err != nil {
+		http.Error(w, "writing temp file: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	tmp.Close()
+
+	// Stage via the RemoteStager interface
+	stager, ok := s.model.(model.RemoteStager)
+	if !ok {
+		http.Error(w, "remote staging not available", http.StatusInternalServerError)
+		return
+	}
+
+	if err := stager.StageRemoteFile(folder, tmp.Name(), name); err != nil {
+		http.Error(w, "staging file: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	sendJSON(w, map[string]string{"status": "ok"})
 }
 
 func (*service) getSystemBrowse(w http.ResponseWriter, r *http.Request) {

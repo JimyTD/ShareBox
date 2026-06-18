@@ -396,6 +396,7 @@
                       <span ng-if="folder.type == 'sendonly'" class="fas fa-fw fa-upload"></span>
                       <span ng-if="folder.type == 'receiveonly'" class="fas fa-fw fa-download"></span>
                       <span ng-if="folder.type == 'receiveencrypted'" class="fas fa-fw fa-lock"></span>
+                      <span ng-if="folder.type == 'remoteaccess'" class="fas fa-fw fa-globe"></span>
                     </div>
                     <div class="panel-status pull-right text-{{folderClass(folder)}}" ng-switch="folderStatus(folder)">
                       <span class="hidden-xs">{{folderStatusText(folder)}}</span>
@@ -499,6 +500,7 @@
                             <span ng-if="folder.type == 'sendonly'" translate>Send Only</span>
                             <span ng-if="folder.type == 'receiveonly'" translate>Receive Only</span>
                             <span ng-if="folder.type == 'receiveencrypted'" translate>Receive Encrypted</span>
+                            <span ng-if="folder.type == 'remoteaccess'" translate>Remote Access</span>
                           </td>
                         </tr>
                         <tr>

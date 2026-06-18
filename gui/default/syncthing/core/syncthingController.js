@@ -2334,6 +2334,9 @@ angular.module('syncthing.core')
                 $scope.currentFolder.fsWatcherEnabled = false;
                 $scope.currentFolder.ignorePerms = true;
                 delete $scope.currentFolder.versioning;
+            } else if ($scope.currentFolder.type === 'remoteaccess') {
+                $scope.currentFolder.fsWatcherEnabled = false;
+                delete $scope.currentFolder.versioning;
             } else {
                 $scope.currentFolder.fsWatcherEnabled = true;
             }

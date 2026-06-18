@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -25,6 +26,13 @@ func init() {
 	folderFactories[config.FolderTypeRemoteAccess] = newRemoteAccessFolder
 }
 
+// RemoteStager is implemented by the model to support staging files for
+// RemoteAccess folder uploads. The API layer can type-assert to this
+// interface to trigger remote file staging.
+type RemoteStager interface {
+	StageRemoteFile(folderID, srcPath, dstName string) error
+}
+
 // remoteAccessFolder allows browsing and uploading to a remote folder
 // without syncing all files locally. It receives the remote index (so file
 // listings are available in the database) but never pulls files.
@@ -38,7 +46,7 @@ type remoteAccessFolder struct {
 
 func newRemoteAccessFolder(model *model, ignores *ignore.Matcher, cfg config.FolderConfiguration, _ versioner.Versioner, evLogger events.Logger, ioLimiter *semaphore.Semaphore) service {
 	if err := os.MkdirAll(cfg.Path, 0o700); err != nil {
-		l.Warnf("Failed to create staging directory %s: %v", cfg.Path, err)
+		slog.Warn("Failed to create staging directory", "path", cfg.Path, "error", err)
 	}
 
 	f := &remoteAccessFolder{
@@ -117,20 +125,25 @@ func (f *remoteAccessFolder) StageData(name string, reader io.Reader) error {
 // all remote peers known to this folder.
 func (f *remoteAccessFolder) CleanupStaging() error {
 	folderFS := f.Filesystem()
-	entries, err := folderFS.ReadDir(".")
+	names, err := folderFS.DirNames(".")
 	if err != nil {
 		return fmt.Errorf("reading staging dir: %w", err)
 	}
 
-	for _, entry := range entries {
-		if entry.IsDir() {
+	for _, name := range names {
+		// Skip directories
+		fi, err := folderFS.Lstat(name)
+		if err != nil {
 			continue
 		}
-		name := entry.Name()
+		if fi.IsDir() {
+			continue
+		}
+
 		// Check if this file has been synced globally
 		gf, ok, err := f.db.GetGlobalFile(f.folderID, name)
 		if err != nil {
-			l.Warnf("CleanupStaging: error checking global file %q: %v", name, err)
+			f.sl.Warn("CleanupStaging: error checking global file", "name", name, "error", err)
 			continue
 		}
 		if !ok {
@@ -146,7 +159,7 @@ func (f *remoteAccessFolder) CleanupStaging() error {
 
 		if lf.Version.GreaterEqual(gf.Version) {
 			if err := folderFS.Remove(name); err != nil {
-				l.Warnf("CleanupStaging: error removing %q: %v", name, err)
+				f.sl.Warn("CleanupStaging: error removing file", "name", name, "error", err)
 			}
 		}
 	}
