@@ -356,6 +356,10 @@ func (s *service) Serve(ctx context.Context) error {
 	// Handle the special meta.js path
 	mux.Handle("/meta.js", noCacheMiddleware(http.HandlerFunc(s.getJSMetadata)))
 
+	// Serve ShareBox frontend (independent UI for RemoteAccess)
+	mux.HandleFunc("/sharebox", s.shareBoxIndex)
+	mux.HandleFunc("/sharebox/", s.shareBoxIndex)
+
 	// Handle Prometheus metrics
 	promHttpHandler := promhttp.Handler()
 	mux.Handle("/metrics", promHttpHandler)
@@ -1698,6 +1702,19 @@ func (s *service) postFolderUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sendJSON(w, map[string]string{"status": "ok"})
+}
+
+// shareBoxIndex serves the ShareBox frontend with the API key injected.
+func (s *service) shareBoxIndex(w http.ResponseWriter, r *http.Request) {
+	html, err := os.ReadFile("gui/sharebox/index.html")
+	if err != nil {
+		http.Error(w, "ShareBox frontend not found (expected at gui/sharebox/index.html)", http.StatusNotFound)
+		return
+	}
+	apiKey := s.cfg.GUI().APIKey
+	html = bytes.Replace(html, []byte("__API_KEY__"), []byte(apiKey), 1)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write(html)
 }
 
 func (*service) getSystemBrowse(w http.ResponseWriter, r *http.Request) {
