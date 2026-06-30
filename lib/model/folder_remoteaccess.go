@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/syncthing/syncthing/lib/config"
 	"github.com/syncthing/syncthing/lib/events"
@@ -73,6 +74,35 @@ func (f *remoteAccessFolder) Override() {
 	// no-op
 }
 
+// remoteAccessCleanupInterval controls how often staged upload files are
+// checked and removed once all peers have received them.
+const remoteAccessCleanupInterval = 30 * time.Second
+
+// Serve runs the embedded folder service together with a periodic staging
+// cleanup loop that removes uploaded files from the local host after they have
+// been delivered to all sharing peers.
+func (f *remoteAccessFolder) Serve(ctx context.Context) error {
+	go f.cleanupLoop(ctx)
+	return f.folder.Serve(ctx)
+}
+
+// cleanupLoop periodically removes staged upload files that have been fully
+// delivered to all peers, until the folder is stopped.
+func (f *remoteAccessFolder) cleanupLoop(ctx context.Context) {
+	ticker := time.NewTicker(remoteAccessCleanupInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := f.CleanupStaging(); err != nil {
+				f.sl.Warn("RemoteAccess staging cleanup failed", "error", err)
+			}
+		}
+	}
+}
+
 // StageFile copies a local file into the folder's staging area and triggers a
 // scan so Syncthing picks it up, hashes it, and sends it to remote peers via
 // the existing index exchange and block transfer machinery.
@@ -121,9 +151,30 @@ func (f *remoteAccessFolder) StageData(name string, reader io.Reader) error {
 	return nil
 }
 
-// CleanupStaging removes staged files that have been successfully synced to
-// all remote peers known to this folder.
+// CleanupStaging removes staged upload files once every remote peer that shares
+// this folder has received the current version of the file. This keeps only a
+// transient local copy: after the file has landed on all peers it is removed
+// from the host so files are not retained locally.
+//
+// NOTE: removing the local file makes Syncthing record a deletion that, on a
+// normally configured peer, would propagate and delete the peer's copy as well.
+// To retain the file on the receiving host after sender-side cleanup, the host
+// folder must have "ignoreDelete" enabled. Cleanup is therefore intentionally
+// conservative — it only fires after delivery is confirmed for all peers.
 func (f *remoteAccessFolder) CleanupStaging() error {
+	// Collect the remote devices we share this folder with (excluding self).
+	var peers []protocol.DeviceID
+	for _, d := range f.Devices {
+		if d.DeviceID == protocol.LocalDeviceID || d.DeviceID == f.model.id {
+			continue
+		}
+		peers = append(peers, d.DeviceID)
+	}
+	if len(peers) == 0 {
+		// No peers to receive the file — nothing safe to clean up yet.
+		return nil
+	}
+
 	folderFS := f.Filesystem()
 	names, err := folderFS.DirNames(".")
 	if err != nil {
@@ -131,37 +182,48 @@ func (f *remoteAccessFolder) CleanupStaging() error {
 	}
 
 	for _, name := range names {
-		// Skip directories
+		// Skip directories.
 		fi, err := folderFS.Lstat(name)
-		if err != nil {
-			continue
-		}
-		if fi.IsDir() {
+		if err != nil || fi.IsDir() {
 			continue
 		}
 
-		// Check if this file has been synced globally
-		gf, ok, err := f.db.GetGlobalFile(f.folderID, name)
-		if err != nil {
-			f.sl.Warn("CleanupStaging: error checking global file", "name", name, "error", err)
-			continue
-		}
-		if !ok {
-			// Not in global yet — might still be sending
-			continue
-		}
-
-		// Check if our local version matches the global version
+		// Our local record of the file must exist and not already be deleted.
 		lf, ok, err := f.db.GetDeviceFile(f.folderID, protocol.LocalDeviceID, name)
-		if err != nil || !ok {
+		if err != nil || !ok || lf.IsDeleted() {
 			continue
 		}
 
-		if lf.Version.GreaterEqual(gf.Version) {
-			if err := folderFS.Remove(name); err != nil {
-				f.sl.Warn("CleanupStaging: error removing file", "name", name, "error", err)
+		// Devices that currently hold the global (newest) version of the file.
+		avail, err := f.db.GetGlobalAvailability(f.folderID, name)
+		if err != nil {
+			f.sl.Warn("CleanupStaging: availability check failed", "name", name, "error", err)
+			continue
+		}
+		have := make(map[protocol.DeviceID]struct{}, len(avail))
+		for _, d := range avail {
+			have[d] = struct{}{}
+		}
+
+		// Only remove once every peer has the current version.
+		allReceived := true
+		for _, p := range peers {
+			if _, ok := have[p]; !ok {
+				allReceived = false
+				break
 			}
 		}
+		if !allReceived {
+			continue
+		}
+
+		if err := folderFS.Remove(name); err != nil {
+			f.sl.Warn("CleanupStaging: removing staged file failed", "name", name, "error", err)
+			continue
+		}
+		f.sl.Info("RemoteAccess staged file delivered to all peers, removed local copy", "name", name)
+		// Trigger a scan so the local index reflects the removal.
+		f.ScheduleScan()
 	}
 
 	return nil

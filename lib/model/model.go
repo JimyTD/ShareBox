@@ -1807,6 +1807,13 @@ func (m *model) handleAutoAccepts(deviceID protocol.DeviceID, folder protocol.Fo
 				fcfg.Versioning.Reset()
 				// Other necessary settings are ensured by FolderConfiguration itself
 			} else {
+				// ShareBox: auto-accepted folders act as a "drop box" for the
+				// family group. The sending peer uses a RemoteAccess folder and
+				// removes its local copy after delivery (see folder_remoteaccess
+				// CleanupStaging). IgnoreDelete keeps the host's copy so the file
+				// is retained here instead of being deleted by that propagation.
+				fcfg.IgnoreDelete = true
+
 				ignores := m.cfg.DefaultIgnores()
 				if err := m.setIgnores(fcfg, ignores.Lines); err != nil {
 					slog.Error("Failed to apply default ignores to auto-accepted folder", folder.LogAttr(), slogutil.FilePath(fullPath), slogutil.Error(err))
