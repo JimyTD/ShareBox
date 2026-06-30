@@ -432,15 +432,28 @@ body {
 <div class="main">
   <!-- 左侧 -->
   <div class="sidebar" id="sidebar">
-    <!-- 家庭组面板 -->
-    <div class="group-panel" id="groupPanel">
-      <div class="loading"><div class="spinner"></div></div>
+    <!-- ShareBox 面板：本机身份 + 家庭收件箱（无 Hub，基于 syncthing 原生 + 清单文件夹） -->
+    <div class="group-panel" id="shareboxPanel">
+      <div class="gp-title">本机</div>
+      <div class="gp-name" id="sbMeName" style="font-size:15px">加载中…</div>
+      <div class="gp-invite" id="sbMeId" onclick="copyMyId()" title="点击复制完整 Device ID">ID: …</div>
+      <div style="display:flex;gap:8px;margin-bottom:6px">
+        <button class="gp-create" style="flex:1;padding:8px;border:none;border-radius:6px;font-size:13px;cursor:pointer;font-weight:500" onclick="showMyQR()">📷 我的二维码</button>
+        <button class="gp-join" style="flex:1;padding:8px;border:none;border-radius:6px;font-size:13px;cursor:pointer;font-weight:500" onclick="showAddDevice()">➕ 添加设备</button>
+      </div>
+      <div class="gp-title" style="display:flex;justify-content:space-between;align-items:center;margin-top:12px">
+        <span>家庭收件箱</span>
+        <span onclick="loadFamily()" style="cursor:pointer;font-size:13px" title="刷新">🔄</span>
+      </div>
+      <div class="gp-members" id="sbFamily">
+        <div class="loading"><div class="spinner"></div></div>
+      </div>
     </div>
 
-    <!-- 本机文件夹 -->
+    <!-- 我的收件箱（本机持有，家人可投入） -->
     <div class="sidebar-header">
-      <span>📁 本机文件夹</span>
-      <button class="add-btn" onclick="showCreateModal()" title="新建文件夹">+</button>
+      <span>📥 我的收件箱</span>
+      <button class="add-btn" onclick="showCreateModal()" title="新建收件箱">+</button>
     </div>
     <div class="folder-list" id="folderList">
       <div class="loading"><div class="spinner"></div></div>
@@ -484,54 +497,51 @@ body {
 <!-- 新建文件夹模态框 -->
 <div class="modal-overlay" id="createModal" style="display:none" onclick="if(event.target===this) hideCreateModal()">
   <div class="modal">
-    <h3>📁 新建文件夹</h3>
-    <label>名称</label>
-    <input type="text" id="newFolderLabel" placeholder="我的共享文件夹">
-    <label>本地路径</label>
+    <h3>📥 新建收件箱</h3>
+    <p style="font-size:13px;color:#8892b0;margin-bottom:12px">收件箱是本机的一个目录，家人可以把文件投进来；文件保留在本机，对方投完后不在对方留副本。创建后自动共享给已添加的家庭设备。</p>
+    <label>收件箱名称</label>
+    <input type="text" id="newFolderLabel" placeholder="例如：照片收件箱">
+    <label>本地存放目录</label>
     <div style="display:flex;gap:8px">
-      <input type="text" id="newFolderPath" placeholder="C:\Users\Me\ShareBox" style="flex:1">
+      <input type="text" id="newFolderPath" placeholder="C:\Users\Me\Inbox" style="flex:1">
       <button class="btn btn-outline" onclick="showDirPicker()" style="white-space:nowrap;padding:10px 16px">📂 浏览</button>
     </div>
-    <label>类型</label>
-    <select id="newFolderType">
-      <option value="remoteaccess">远程访问 (浏览+上传，不下载)</option>
-      <option value="sendreceive">双向同步</option>
-      <option value="sendonly">仅发送</option>
-      <option value="receiveonly">仅接收</option>
-    </select>
     <div class="btn-row">
       <button class="btn btn-cancel" onclick="hideCreateModal()">取消</button>
-      <button class="btn btn-primary" onclick="createFolder()">创建</button>
+      <button class="btn btn-primary" onclick="createFolder()">创建收件箱</button>
     </div>
   </div>
 </div>
 
-<!-- 创建家庭组模态框 -->
-<div class="modal-overlay" id="createGroupModal" style="display:none" onclick="if(event.target===this)hideCreateGroup()">
-  <div class="modal">
-    <h3>👨‍👩‍👧 创建家庭组</h3>
-    <label>家庭组名称</label>
-    <input type="text" id="groupNameInput" placeholder="例如：我的家">
-    <label>本设备名称</label>
-    <input type="text" id="groupDeviceNameInput" placeholder="例如：书房电脑">
+<!-- 我的二维码模态框 -->
+<div class="modal-overlay" id="qrModal" style="display:none" onclick="if(event.target===this)hideMyQR()">
+  <div class="modal" style="text-align:center">
+    <h3>📷 本机设备码</h3>
+    <p style="font-size:13px;color:#8892b0;margin-bottom:12px">让家人用 ShareBox「添加设备」扫描或粘贴此 ID，双方各确认一次即可配对。</p>
+    <img id="qrImg" alt="设备二维码" style="width:220px;height:220px;background:#f5f6fa;border-radius:8px;margin:0 auto 12px;display:block">
+    <div id="qrIdText" style="font-family:monospace;font-size:11px;word-break:break-all;background:#f5f6fa;padding:8px;border-radius:6px;margin-bottom:12px"></div>
     <div class="btn-row">
-      <button class="btn btn-cancel" onclick="hideCreateGroup()">取消</button>
-      <button class="btn btn-primary" onclick="doCreateGroup()">创建</button>
+      <button class="btn btn-outline" onclick="copyMyId()">复制 ID</button>
+      <button class="btn btn-primary" onclick="hideMyQR()">完成</button>
     </div>
   </div>
 </div>
 
-<!-- 加入家庭组模态框 -->
-<div class="modal-overlay" id="joinGroupModal" style="display:none" onclick="if(event.target===this)hideJoinGroup()">
+<!-- 添加设备模态框 -->
+<div class="modal-overlay" id="addDeviceModal" style="display:none" onclick="if(event.target===this)hideAddDevice()">
   <div class="modal">
-    <h3>🔗 加入家庭组</h3>
-    <label>邀请码</label>
-    <input type="text" id="joinInviteInput" placeholder="6 位邀请码">
-    <label>本设备名称</label>
-    <input type="text" id="joinDeviceNameInput" placeholder="例如：我的手机">
+    <h3>➕ 添加家庭设备</h3>
+    <label>对方 Device ID（扫码所得或粘贴）</label>
+    <input type="text" id="addDeviceId" placeholder="XXXXXXX-XXXXXXX-...">
+    <label>设备名称</label>
+    <input type="text" id="addDeviceName" placeholder="例如：老爸的电脑">
+    <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-weight:normal;cursor:pointer">
+      <input type="checkbox" id="addDeviceIntroducer" style="width:auto;margin:0">
+      设为"介绍人"（常开的那台主机勾选，自动把家人互相介绍）
+    </label>
     <div class="btn-row">
-      <button class="btn btn-cancel" onclick="hideJoinGroup()">取消</button>
-      <button class="btn btn-primary" onclick="doJoinGroup()">加入</button>
+      <button class="btn btn-cancel" onclick="hideAddDevice()">取消</button>
+      <button class="btn btn-primary" onclick="addDevice()">添加</button>
     </div>
   </div>
 </div>
@@ -560,15 +570,18 @@ const API_KEY = "__API_KEY__";
 const BASE = "";
 const HEADERS = { "X-API-Key": API_KEY, "Content-Type": "application/json" };
 
-// Hub 地址（单机测试默认 localhost:9527，可在 localStorage 覆盖）
-const HUB_BASE = (localStorage.getItem("sharebox_hub") || "http://localhost:9527") + "/api";
-
-// 当前家庭组信息（存 localStorage）
-let groupInfo = JSON.parse(localStorage.getItem("sharebox_group") || "null");
+// ── ShareBox（无 Hub）状态 ──
+const MANIFEST_FOLDER = "sharebox-manifest";   // 家庭清单文件夹的固定 ID
+const INBOX_PREFIX = "inbox-";                  // 收件箱文件夹 ID 前缀
+let myID = "";          // 本机 syncthing Device ID
+let myName = "";        // 本机设备名
+let family = [];        // 家庭清单聚合结果（每台设备的自述）
 
 let folders = [];
 let currentFolder = null;
 let currentPrefix = "";
+
+function isInbox(f) { return f && f.id && f.id.indexOf(INBOX_PREFIX) === 0 && f.type !== "remoteaccess"; }
 
 // ── 工具函数 ──
 function toast(msg, type) {
@@ -634,9 +647,13 @@ async function loadFolders() {
   try {
     folders = await api("/rest/config/folders");
     renderFolderList();
-    // 加载设备信息
+    // 加载本机身份
     const status = await api("/rest/system/status");
-    document.getElementById("deviceInfo").textContent = status.myID || "";
+    myID = status.myID || "";
+    const me = (await api("/rest/config/devices")).find(d => d.deviceID === myID);
+    myName = (me && me.name) || "本机";
+    document.getElementById("deviceInfo").textContent = myID;
+    renderMe();
   } catch (e) {
     toast("加载失败: " + e.message, "error");
     document.getElementById("folderList").innerHTML = '<div class="empty-state"><p>无法连接服务</p></div>';
@@ -645,16 +662,17 @@ async function loadFolders() {
 
 function renderFolderList() {
   const list = document.getElementById("folderList");
-  if (!folders.length) {
-    list.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div><p>暂无文件夹</p><p class="sub">请先在 Syncthing 界面中添加文件夹</p></div>';
+  const inboxes = folders.filter(isInbox);
+  if (!inboxes.length) {
+    list.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div><p>还没有收件箱</p><p class="sub">点右上角 + 新建一个，家人就能往里投文件</p></div>';
     return;
   }
-  list.innerHTML = folders.map(f => `
+  list.innerHTML = inboxes.map(f => `
     <div class="folder-item ${currentFolder && currentFolder.id === f.id ? 'active' : ''}" onclick="selectFolder('${f.id}')">
-      <div class="icon ${f.type}">${typeEmoji(f.type)}</div>
+      <div class="icon ${f.type}">📥</div>
       <div class="meta">
         <div class="name">${escHtml(f.label || f.id)}</div>
-        <div class="type-tag">${typeLabel(f.type)}</div>
+        <div class="type-tag">收件箱</div>
         <div class="path" title="${escHtml(f.path)}">${escHtml(f.path)}</div>
       </div>
     </div>
@@ -818,7 +836,7 @@ async function uploadFiles(fileList) {
   setTimeout(() => browseFiles(currentPrefix), 1500);
 }
 
-// ── 新建文件夹 ──
+// ── 新建收件箱 ──
 function showCreateModal() {
   document.getElementById("createModal").style.display = "flex";
   document.getElementById("newFolderLabel").focus();
@@ -829,37 +847,41 @@ function hideCreateModal() {
 async function createFolder() {
   const label = document.getElementById("newFolderLabel").value.trim();
   const path = document.getElementById("newFolderPath").value.trim();
-  const type = document.getElementById("newFolderType").value;
-  if (!label) { toast("请输入文件夹名称", "error"); return; }
-  if (!path) { toast("请输入本地路径", "error"); return; }
-  const id = type + "-" + Date.now().toString(36);
+  if (!label) { toast("请输入收件箱名称", "error"); return; }
+  if (!path) { toast("请选择本地存放目录", "error"); return; }
+  const id = INBOX_PREFIX + Date.now().toString(36);
+  // 收件箱 = 仅接收 + 忽略删除（对方投完清理本机副本时，本机宿主保留文件），共享给所有已添加的家庭设备
   const cfg = {
     id: id,
     label: label,
     path: path,
-    type: type,
+    type: "receiveonly",
     rescanIntervalS: 3600,
-    fsWatcherEnabled: type !== "remoteaccess",
+    fsWatcherEnabled: true,
     ignorePerms: false,
+    ignoreDelete: true,
     autoNormalize: true,
-    devices: [],
+    devices: peerDeviceEntries(),
     minDiskFree: { value: 1, unit: "%" }
   };
-  if (type === "remoteaccess") {
-    cfg.ignorePerms = true;
-    cfg.fsWatcherEnabled = false;
-  }
   try {
     await api("/rest/config/folders", { method: "POST", headers: HEADERS, body: JSON.stringify(cfg) });
     hideCreateModal();
     document.getElementById("newFolderLabel").value = "";
     document.getElementById("newFolderPath").value = "";
-    toast("文件夹已创建: " + label, "success");
+    toast("收件箱已创建: " + label, "success");
     await loadFolders();
+    await writeMyManifest();   // 让家人看到这个新收件箱
   } catch (e) {
     toast("创建失败: " + e.message, "error");
   }
 }
+
+// 返回除本机外所有已配对设备的 folder-device 条目（用于共享收件箱/清单给家庭设备）
+function peerDeviceEntries() {
+  return (peerDeviceIDs || []).map(id => ({ deviceID: id }));
+}
+let peerDeviceIDs = [];
 
 // ── 目录选择器 ──
 let dirCurrent = "";
@@ -916,252 +938,201 @@ function confirmDir() {
   hideDirPicker();
 }
 
-// ── 家庭组（Hub） ──
-async function hubApi(path, opts) {
-  opts = opts || {};
-  opts.headers = opts.headers || {};
-  opts.headers["Content-Type"] = "application/json";
-  const res = await fetch(HUB_BASE + path, opts);
-  if (!res.ok) throw new Error((await res.text()) || res.statusText);
-  return res.json();
+// ── ShareBox：本机身份 / 配对 / 家庭清单 ──
+
+function renderMe() {
+  document.getElementById("sbMeName").textContent = myName || "本机";
+  const short = myID ? (myID.slice(0, 7) + "…" + myID.slice(-7)) : "…";
+  document.getElementById("sbMeId").textContent = "ID: " + short;
 }
 
-async function loadGroup() {
-  const panel = document.getElementById("groupPanel");
-  if (!groupInfo) {
-    panel.innerHTML = `
-      <div class="gp-empty">
-        <div class="gp-title">家庭组</div>
-        <p>还没有加入任何家庭组</p>
-        <div class="gp-btns">
-          <button class="gp-create" onclick="showCreateGroup()">创建</button>
-          <button class="gp-join" onclick="showJoinGroup()">加入</button>
-        </div>
-      </div>`;
+function copyMyId() {
+  if (!myID) { toast("尚未获取本机 ID", "error"); return; }
+  navigator.clipboard.writeText(myID).then(() => toast("已复制本机 Device ID", "success"));
+}
+
+async function showMyQR() {
+  if (!myID) { toast("尚未获取本机 ID", "error"); return; }
+  document.getElementById("qrIdText").textContent = myID;
+  document.getElementById("qrModal").style.display = "flex";
+  try {
+    const res = await fetch(BASE + "/qr/?text=" + encodeURIComponent(myID), { headers: { "X-API-Key": API_KEY } });
+    if (res.ok) {
+      const blob = await res.blob();
+      document.getElementById("qrImg").src = URL.createObjectURL(blob);
+    }
+  } catch (e) { /* 二维码是辅助，失败则仅显示文本 ID */ }
+}
+function hideMyQR() { document.getElementById("qrModal").style.display = "none"; }
+
+function showAddDevice() { document.getElementById("addDeviceModal").style.display = "flex"; document.getElementById("addDeviceId").focus(); }
+function hideAddDevice() { document.getElementById("addDeviceModal").style.display = "none"; }
+
+async function addDevice() {
+  const id = document.getElementById("addDeviceId").value.trim();
+  const name = document.getElementById("addDeviceName").value.trim();
+  const introducer = document.getElementById("addDeviceIntroducer").checked;
+  if (!id) { toast("请输入对方 Device ID", "error"); return; }
+  try {
+    await api("/rest/config/devices", {
+      method: "POST", headers: HEADERS,
+      body: JSON.stringify({
+        deviceID: id,
+        name: name || "家庭设备",
+        addresses: ["dynamic"],
+        // 故意不自动接受文件夹：否则对端会全量下载我的收件箱（违背"不下载/不留副本"）。
+        // 清单文件夹靠双方各自创建同 ID 来同步；投送通道在点击收件箱时显式创建为 RemoteAccess。
+        autoAcceptFolders: false,
+        introducer: introducer
+      })
+    });
+    hideAddDevice();
+    document.getElementById("addDeviceId").value = "";
+    document.getElementById("addDeviceName").value = "";
+    document.getElementById("addDeviceIntroducer").checked = false;
+    toast("已添加设备。对方也需添加你并互相确认后才能连接", "success");
+    await refreshPeers();
+    await shareEverythingWithPeers();  // 把清单 + 我的收件箱补共享给（含新设备的）所有家庭设备
+    await writeMyManifest();
+    await loadFamily();
+  } catch (e) {
+    toast("添加失败: " + e.message, "error");
+  }
+}
+
+// 刷新已配对设备（除本机外）
+async function refreshPeers() {
+  try {
+    const devs = await api("/rest/config/devices");
+    peerDeviceIDs = devs.map(d => d.deviceID).filter(id => id && id !== myID);
+  } catch (e) { peerDeviceIDs = []; }
+}
+
+// 没有家庭清单文件夹则创建（共享给所有家庭设备，作为零服务器的"注册表"）
+async function ensureManifestFolder() {
+  if (folders.find(f => f.id === MANIFEST_FOLDER)) return;
+  const cfg = {
+    id: MANIFEST_FOLDER,
+    label: "ShareBox 家庭清单",
+    path: "sharebox-manifest",
+    type: "sendreceive",
+    rescanIntervalS: 30,
+    fsWatcherEnabled: true,
+    ignorePerms: true,
+    autoNormalize: true,
+    devices: peerDeviceEntries(),
+    minDiskFree: { value: 1, unit: "%" }
+  };
+  try {
+    await api("/rest/config/folders", { method: "POST", headers: HEADERS, body: JSON.stringify(cfg) });
+    folders = await api("/rest/config/folders");
+  } catch (e) { console.warn("ensureManifestFolder failed", e); }
+}
+
+// 写本机自述（设备名 + 本机收件箱列表）到清单文件夹
+async function writeMyManifest() {
+  if (!myID || !folders.find(f => f.id === MANIFEST_FOLDER)) return;
+  const dropboxes = folders.filter(isInbox).map(f => ({ folderId: f.id, label: f.label || f.id, type: "inbox" }));
+  const manifest = { deviceId: myID, name: myName, dropboxes: dropboxes, updatedAt: new Date().toISOString() };
+  try {
+    const res = await fetch(BASE + "/rest/sharebox/manifest", { method: "POST", headers: HEADERS, body: JSON.stringify(manifest) });
+    if (!res.ok) console.warn("writeMyManifest:", await res.text());
+  } catch (e) { console.warn("writeMyManifest failed", e); }
+}
+
+// 拉取并展示全家清单
+async function loadFamily() {
+  try { family = await api("/rest/sharebox/manifest"); }
+  catch (e) { family = []; }
+  renderFamily();
+}
+
+function renderFamily() {
+  const el = document.getElementById("sbFamily");
+  const members = (family || []).filter(m => m && m.deviceId);
+  if (!members.length) {
+    el.innerHTML = '<div style="font-size:12px;color:#8892b0;padding:6px 0">还没有家庭收件箱。<br>「添加设备」并双方互相确认后，这里会显示全家的收件箱。</div>';
     return;
   }
-  // 已在组内：拉取成员
-  try {
-    // 先上报本机 syncthing 设备 ID 并自动配对
-    await pairWithGroup();
-    const devices = await hubApi("/groups/" + groupInfo.group_id + "/devices");
-    // 给每个设备拉取文件夹
-    for (const d of devices) {
-      try { d.folders = await hubApi("/devices/" + d.id + "/folders"); }
-      catch (e) { d.folders = []; }
-    }
-    memberDevices = devices;
-    renderGroup(devices);
-  } catch (e) {
-    panel.innerHTML = `<div class="gp-empty"><div class="gp-title">家庭组</div><p>无法连接 Hub: ${escHtml(e.message)}</p>
-      <div class="gp-btns"><button class="gp-join" onclick="leaveGroup()">退出</button></div></div>`;
-  }
-}
-
-function renderGroup(devices) {
-  const panel = document.getElementById("groupPanel");
-  const membersHtml = devices.map(d => {
-    const isMe = d.id === groupInfo.device_id;
-    const folderNames = (d.folders || []).map(f => f.label).join("、") || "无共享目录";
-    return `
-      <div class="gp-member" onclick="selectMember('${escAttr(d.id)}')">
-        <div class="m-name">${isMe ? "💻" : "📱"} ${escHtml(d.name)}${isMe ? " (本机)" : ""}</div>
-        <div class="m-folders">${escHtml(folderNames)}</div>
-      </div>`;
+  el.innerHTML = members.map(m => {
+    const isMe = m.deviceId === myID;
+    const boxes = m.dropboxes || [];
+    const boxesHtml = boxes.length
+      ? boxes.map(b => `<div class="m-folders" style="cursor:pointer;padding:4px 0 4px 22px" onclick="sendToInbox('${escAttr(b.folderId)}','${escAttr(b.label)}','${escAttr(m.deviceId)}',${isMe})">📥 ${escHtml(b.label)}</div>`).join("")
+      : '<div class="m-folders" style="padding-left:22px">无收件箱</div>';
+    return `<div class="gp-member" style="cursor:default">
+      <div class="m-name">${isMe ? "💻" : "📱"} ${escHtml(m.name || "设备")}${isMe ? " (本机)" : ""}</div>
+      ${boxesHtml}
+    </div>`;
   }).join("");
-  panel.innerHTML = `
-    <div class="gp-title">家庭组</div>
-    <div class="gp-name">👨‍👩‍👧 ${escHtml(groupInfo.group_name)}</div>
-    <div class="gp-invite" onclick="copyInvite()" title="点击复制">邀请码: ${escHtml(groupInfo.invite || "?")}</div>
-    <div class="gp-members">${membersHtml}</div>
-    <div class="gp-leave" onclick="leaveGroup()">退出家庭组</div>`;
 }
 
-// 成员设备的文件夹缓存
-let memberDevices = [];
-
-// 薄连接器：上报本机 syncthing ID，并把组内其他设备加为 syncthing 配对设备
-async function pairWithGroup() {
-  if (!groupInfo) return;
-  try {
-    // 1. 获取本机 syncthing 设备 ID
-    const status = await api("/rest/system/status");
-    const myID = status.myID;
-    if (!myID) return;
-
-    // 2. 上报到 Hub
-    await hubApi("/devices/identity", {
-      method: "POST",
-      body: JSON.stringify({ device_id: groupInfo.device_id, syncthing_id: myID })
-    });
-
-    // 3. 拉取组内设备，找出需要配对的对端
-    const devices = await hubApi("/groups/" + groupInfo.group_id + "/devices");
-    const localDevices = await api("/rest/config/devices");
-    const localIDs = new Set(localDevices.map(d => d.deviceID));
-
-    for (const peer of devices) {
-      const sid = peer.device_id; // 对端 syncthing ID
-      if (!sid || sid === myID) continue;       // 跳过空和自己
-      if (localIDs.has(sid)) continue;          // 已配对
-
-      // 4. 添加对端为 syncthing 设备
-      try {
-        await api("/rest/config/devices", {
-          method: "POST",
-          headers: HEADERS,
-          body: JSON.stringify({
-            deviceID: sid,
-            name: peer.name || "ShareBox设备",
-            addresses: ["dynamic"],
-            autoAcceptFolders: true
-          })
-        });
-        console.log("已配对设备:", peer.name, sid);
-      } catch (e) {
-        console.warn("配对失败:", peer.name, e.message);
-      }
-    }
-  } catch (e) {
-    console.warn("pairWithGroup failed:", e.message);
-  }
-}
-
-async function selectMember(devId) {
-  try {
-    const peerFolders = await hubApi("/devices/" + devId + "/folders");
-    if (!peerFolders.length) { toast("该设备没有共享目录", "error"); return; }
-    const isMe = devId === groupInfo.device_id;
-    const peer = memberDevices.find(d => d.id === devId);
-    const peerSyncID = peer ? peer.device_id : "";
-    document.getElementById("contentTitle").textContent = (isMe ? "本机" : (peer ? peer.name : "成员")) + " 的共享目录";
-    document.getElementById("breadcrumb").innerHTML = "";
-    document.getElementById("uploadBtn").style.display = "none";
-    document.getElementById("dropZone").style.display = "none";
-    const area = document.getElementById("fileArea");
-    area.innerHTML = `<table class="file-table"><thead><tr><th>共享目录</th><th>路径</th><th>操作</th></tr></thead><tbody>
-      ${peerFolders.map(f => `<tr>
-        <td><span class="file-name" onclick="openSharedFolder('${escAttr(f.folder_id)}','${escAttr(f.label)}','${escAttr(peerSyncID)}',${isMe})">🌐 ${escHtml(f.label)}</span></td>
-        <td class="file-size">${escHtml(f.path || "-")}</td>
-        <td class="actions">${isMe ? '<span class="file-time">本机</span>' : '<button class="btn btn-outline" onclick="openSharedFolder(\'' + escAttr(f.folder_id) + '\',\'' + escAttr(f.label) + '\',\'' + escAttr(peerSyncID) + '\',false)">打开/投送</button>'}</td>
-      </tr>`).join("")}
-      </tbody></table>`;
-  } catch (e) { toast("加载失败: " + e.message, "error"); }
-}
-
-// 打开共享目录：本机有则直接浏览；是对端目录则自动建同名 RemoteAccess 文件夹并共享给对端
-async function openSharedFolder(folderId, label, peerSyncID, isMe) {
+// 点击某收件箱：本机有则直接打开；是对端收件箱则自动建同 ID 的 RemoteAccess 投送通道
+async function sendToInbox(folderId, label, peerDeviceId, isMe) {
   let f = folders.find(x => x.id === folderId);
   if (f) { selectFolder(folderId); return; }
-
-  if (isMe) {
-    toast("本机未找到该文件夹（可能已删除）", "error");
-    return;
-  }
-
-  // 对端目录：自动在本机创建匹配的 RemoteAccess 文件夹，共享给对端
-  if (!peerSyncID) {
-    toast("对端尚未上报设备ID，等待对方打开 ShareBox 后重试", "error");
+  if (isMe) { toast("本机收件箱未找到，请点 🔄 刷新", "error"); return; }
+  if (!peerDeviceId) { toast("对方设备信息缺失", "error"); return; }
+  if (peerDeviceIDs.indexOf(peerDeviceId) < 0) {
+    toast("尚未添加对方为设备，请先在「添加设备」里加对方并互相确认", "error");
     return;
   }
   try {
-    toast("正在为「" + label + "」建立投送通道...", "");
+    toast("正在为「" + label + "」建立投送通道…", "");
     const cfg = {
-      id: folderId,
+      id: folderId,                       // 必须与对端收件箱同 ID 才能同步
       label: label,
-      path: "sharebox-send/" + folderId,   // 相对 syncthing home 的暂存目录
+      path: "sharebox-send/" + folderId,  // 本机暂存目录（投送完会被清理）
       type: "remoteaccess",
       rescanIntervalS: 3600,
       fsWatcherEnabled: false,
       ignorePerms: true,
       autoNormalize: true,
-      devices: [{ deviceID: peerSyncID }],
+      devices: [{ deviceID: peerDeviceId }],
       minDiskFree: { value: 1, unit: "%" }
     };
     await api("/rest/config/folders", { method: "POST", headers: HEADERS, body: JSON.stringify(cfg) });
-    toast("投送通道已建立", "success");
-    await loadFolders();          // 刷新本机文件夹
-    f = folders.find(x => x.id === folderId);
-    if (f) selectFolder(folderId);
+    toast("投送通道已建立，拖文件进去即可发送", "success");
+    folders = await api("/rest/config/folders");
+    selectFolder(folderId);
   } catch (e) {
     toast("建立投送通道失败: " + e.message, "error");
   }
 }
 
-function showCreateGroup() { document.getElementById("createGroupModal").style.display = "flex"; }
-function hideCreateGroup() { document.getElementById("createGroupModal").style.display = "none"; }
-function showJoinGroup() { document.getElementById("joinGroupModal").style.display = "flex"; }
-function hideJoinGroup() { document.getElementById("joinGroupModal").style.display = "none"; }
-
-async function doCreateGroup() {
-  const name = document.getElementById("groupNameInput").value.trim();
-  const devName = document.getElementById("groupDeviceNameInput").value.trim();
-  if (!name) { toast("请输入家庭组名称", "error"); return; }
-  if (!devName) { toast("请输入本设备名称", "error"); return; }
-  try {
-    const g = await hubApi("/groups", { method: "POST", body: JSON.stringify({ name }) });
-    const d = await hubApi("/groups/" + g.id + "/join", {
-      method: "POST", body: JSON.stringify({ invite: g.invite, device_name: devName })
-    });
-    groupInfo = { group_id: g.id, group_name: name, invite: g.invite, device_id: d.device_id, device_name: devName };
-    localStorage.setItem("sharebox_group", JSON.stringify(groupInfo));
-    hideCreateGroup();
-    toast("家庭组已创建", "success");
-    await syncFoldersToHub();
-    await loadGroup();
-  } catch (e) { toast("创建失败: " + e.message, "error"); }
-}
-
-async function doJoinGroup() {
-  const invite = document.getElementById("joinInviteInput").value.trim();
-  const devName = document.getElementById("joinDeviceNameInput").value.trim();
-  if (!invite) { toast("请输入邀请码", "error"); return; }
-  if (!devName) { toast("请输入本设备名称", "error"); return; }
-  try {
-    const d = await hubApi("/groups/join", {
-      method: "POST", body: JSON.stringify({ invite, device_name: devName })
-    });
-    groupInfo = { group_id: d.group_id, group_name: d.group_name, invite: invite, device_id: d.device_id, device_name: devName };
-    localStorage.setItem("sharebox_group", JSON.stringify(groupInfo));
-    hideJoinGroup();
-    toast("已加入家庭组: " + d.group_name, "success");
-    await syncFoldersToHub();
-    await loadGroup();
-  } catch (e) { toast("加入失败: " + e.message, "error"); }
-}
-
-function leaveGroup() {
-  if (!confirm("确定退出当前家庭组？")) return;
-  groupInfo = null;
-  localStorage.removeItem("sharebox_group");
-  loadGroup();
-  toast("已退出家庭组", "success");
-}
-
-function copyInvite() {
-  if (groupInfo && groupInfo.invite) {
-    navigator.clipboard.writeText(groupInfo.invite).then(() => toast("邀请码已复制: " + groupInfo.invite, "success"));
+// 把家庭清单 + 我的收件箱补共享给所有已配对设备（新设备加入时调用）
+async function shareEverythingWithPeers() {
+  await refreshPeers();
+  if (!peerDeviceIDs.length) return;
+  const targetIds = [MANIFEST_FOLDER].concat(folders.filter(isInbox).map(f => f.id));
+  for (const fid of targetIds) {
+    const f = folders.find(x => x.id === fid);
+    if (!f) continue;
+    const have = new Set((f.devices || []).map(d => d.deviceID));
+    let changed = false;
+    f.devices = f.devices || [];
+    for (const pid of peerDeviceIDs) {
+      if (!have.has(pid)) { f.devices.push({ deviceID: pid }); changed = true; }
+    }
+    if (changed) {
+      try { await api("/rest/config/folders/" + encodeURIComponent(fid), { method: "PUT", headers: HEADERS, body: JSON.stringify(f) }); }
+      catch (e) { console.warn("re-share failed", fid, e); }
+    }
   }
-}
-
-// 把本机文件夹注册到 Hub，让组内其他设备可见
-async function syncFoldersToHub() {
-  if (!groupInfo) return;
-  const ra = folders.filter(f => f.type === "remoteaccess");
-  if (!ra.length) return;
-  try {
-    await hubApi("/devices/folders", {
-      method: "POST",
-      body: JSON.stringify({
-        device_id: groupInfo.device_id,
-        folders: ra.map(f => ({ folder_id: f.id, label: f.label || f.id, path: f.path, folder_type: f.type }))
-      })
-    });
-  } catch (e) { console.warn("syncFoldersToHub failed", e); }
+  folders = await api("/rest/config/folders");
 }
 
 // ── 启动 ──
-loadFolders().then(() => { loadGroup(); });
+async function init() {
+  await loadFolders();        // 本机身份 + 收件箱
+  await refreshPeers();       // 已配对设备
+  await ensureManifestFolder();
+  await shareEverythingWithPeers();  // 确保清单/收件箱共享给所有家庭设备
+  await writeMyManifest();    // 写本机自述
+  await loadFamily();         // 全家清单
+  setInterval(loadFamily, 15000);    // 清单会随 syncthing 同步，定时刷新
+}
+init();
 </script>
 
 </body>

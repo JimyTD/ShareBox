@@ -261,6 +261,8 @@ func (s *service) Serve(ctx context.Context) error {
 	restMux.HandlerFunc(http.MethodGet, "/rest/db/status", s.getDBStatus)                     // folder
 	restMux.HandlerFunc(http.MethodGet, "/rest/db/browse", s.getDBBrowse)                     // folder [prefix] [dirsonly] [levels]
 	restMux.HandlerFunc(http.MethodPost, "/rest/folder/upload", s.postFolderUpload)           // folder name
+	restMux.HandlerFunc(http.MethodGet, "/rest/sharebox/manifest", s.getShareBoxManifest)     // [folder]
+	restMux.HandlerFunc(http.MethodPost, "/rest/sharebox/manifest", s.postShareBoxManifest)   // [folder] <body>
 	restMux.HandlerFunc(http.MethodGet, "/rest/folder/versions", s.getFolderVersions)         // folder
 	restMux.HandlerFunc(http.MethodGet, "/rest/folder/errors", s.getFolderErrors)             // folder [perpage] [page]
 	restMux.HandlerFunc(http.MethodGet, "/rest/folder/pullerrors", s.getFolderErrors)         // folder (deprecated)
@@ -1701,6 +1703,90 @@ func (s *service) postFolderUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	sendJSON(w, map[string]string{"status": "ok"})
+}
+
+// shareBoxManifestFolder is the well-known folder ID used as the family manifest.
+// Each device writes only its own <deviceID>.json into it; syncthing syncs the
+// folder across the family so every device sees everyone's exposed drop-boxes.
+const shareBoxManifestFolder = "sharebox-manifest"
+
+// getShareBoxManifest aggregates all per-device manifest JSON files in the
+// manifest folder and returns them as a JSON array. Replaces the old Hub
+// device/folder registry — the "registry" is now a synced folder, no server.
+func (s *service) getShareBoxManifest(w http.ResponseWriter, r *http.Request) {
+	folderID := r.URL.Query().Get("folder")
+	if folderID == "" {
+		folderID = shareBoxManifestFolder
+	}
+	fcfg, ok := s.cfg.Folder(folderID)
+	if !ok {
+		sendJSON(w, []json.RawMessage{})
+		return
+	}
+	ffs := fcfg.Filesystem()
+	names, err := ffs.DirNames(".")
+	if err != nil {
+		sendJSON(w, []json.RawMessage{})
+		return
+	}
+	out := []json.RawMessage{}
+	for _, name := range names {
+		if !strings.HasSuffix(name, ".json") {
+			continue
+		}
+		fd, err := ffs.Open(name)
+		if err != nil {
+			continue
+		}
+		data, err := io.ReadAll(fd)
+		fd.Close()
+		if err != nil || !json.Valid(data) {
+			continue
+		}
+		out = append(out, json.RawMessage(data))
+	}
+	sendJSON(w, out)
+}
+
+// postShareBoxManifest writes this device's manifest (request body, JSON) into
+// the manifest folder as <deviceID>.json and triggers a scan so it syncs to
+// peers. Each device only ever writes its own file, so there are no conflicts.
+func (s *service) postShareBoxManifest(w http.ResponseWriter, r *http.Request) {
+	folderID := r.URL.Query().Get("folder")
+	if folderID == "" {
+		folderID = shareBoxManifestFolder
+	}
+	fcfg, ok := s.cfg.Folder(folderID)
+	if !ok {
+		http.Error(w, "manifest folder not configured", http.StatusNotFound)
+		return
+	}
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "reading body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if !json.Valid(body) {
+		http.Error(w, "body is not valid JSON", http.StatusBadRequest)
+		return
+	}
+	ffs := fcfg.Filesystem()
+	name := s.id.String() + ".json"
+	fd, err := ffs.Create(name)
+	if err != nil {
+		http.Error(w, "creating manifest file: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if _, err := fd.Write(body); err != nil {
+		fd.Close()
+		http.Error(w, "writing manifest file: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	fd.Close()
+	if err := s.model.ScanFolderSubdirs(folderID, []string{name}); err != nil {
+		slog.Warn("ShareBox: manifest scan failed", "folder", folderID, slogutil.Error(err))
+	}
 	sendJSON(w, map[string]string{"status": "ok"})
 }
 

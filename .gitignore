@@ -3,6 +3,4 @@ _test_home/
 _test_ra_folder/
 syncthing.exe
 syncthing.exe~
-sharehub.exe
-sharehub.db
 *.log
